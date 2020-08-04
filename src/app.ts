@@ -7,13 +7,14 @@ import { Client } from "whatsapp-web.js";
 import path = require("path");
 import bodyParser = require("body-parser");
 import { TagsSocketIO } from "./tags-socket-io";
+import cors from "cors";
 const fs = require(`fs`);
 
 class App {
   public app: express.Application;
   public server: Server;
   public io: SocketIO.Server;
-  public PORT: number = 8100;
+  public PORT: number = 8080;
   public sessions: { [id: string]: { telefone: string; client: Client } } = {};
 
   constructor() {
@@ -24,6 +25,12 @@ class App {
 
   routes() {
     this.app = express();
+    this.app.use((req, res, next) => {
+      res.header("Access-Control-Allow-Origin", "*");
+      res.header("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE");
+      this.app.use(cors());
+      next();
+    });
 
     this.app.use(bodyParser.json());
     this.app.use(bodyParser.urlencoded({ extended: true }));
