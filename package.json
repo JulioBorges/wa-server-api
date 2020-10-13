@@ -1,5 +1,5 @@
 {
-  "name": "ts-apistandard",
+  "name": "wa-api-server",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -13,6 +13,9 @@
     "dev": "nodemon --watch src -e ts,ejs --exec npm run dev:start",
     "start": "node .",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": "12.x.x"
   },
   "keywords": [],
   "author": "",
@@ -41,6 +44,7 @@
     "dotenv": "^8.2.0",
     "ejs": "^3.1.3",
     "express": "^4.17.1",
+    "puppeteer": "^5.2.1",
     "qrcodejs": "^1.0.0",
     "socket.io": "^2.3.0",
     "whatsapp-web.js": "^1.7.0"

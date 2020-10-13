@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>WhatsApp Socket</title>
+    <title>Api interna</title>
     <style>
       * {
         margin: 0;
@@ -52,62 +52,6 @@
   </head>
 
   <body>
-    <div id="qrCode" style="margin: 16px;"></div>
-    <form id="form" action="">
-      <input id="origem" placeholder="TelefoneOrigem" autocomplete="off" style="margin-bottom: 4px;" />
-      <input id="number" placeholder="Destino" autocomplete="off" style="margin-bottom: 4px;" />
-      <input id="msg" placeholder="Mensagem" autocomplete="off" />
-      <button type="submit">Send</button>
-    </form>
-    <button id="btnConectar">Conectar</button>
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="https://cdn.rawgit.com/davidshimjs/qrcodejs/gh-pages/qrcode.min.js"></script>
-    <script>
-      function onload() {
-        var socket = io();
-        var qrcode = new QRCode("qrCode");
-
-        var form_el = document.getElementById("form");
-        form_el.addEventListener("submit", function (evt) {
-          evt.preventDefault();
-
-          const origem = document.getElementById("origem").value;
-          const number = document.getElementById("number").value;
-          const msg = document.getElementById("msg").value;
-
-          socket.emit("message-wa", {
-            origem: origem,
-            number: number,
-            message: msg,
-          });
-
-          document.getElementById("msg").value = "";
-        });
-
-        var btnCon = document.getElementById("btnConectar");
-        btnCon.addEventListener("click", function (evt) {
-          const origem = document.getElementById("origem").value;
-          if (!origem) return;
-
-          console.log(`Conectando ${origem}`);
-          socket.emit("INIT", origem);
-        });
-
-        socket.on("QRCODE", function (msg) {
-          console.log("QR gerado");
-          qrcode.clear();
-          qrcode.makeCode(msg);
-        });
-
-        socket.on("WACONECTADO", function (msg) {
-          qrcode.clear();
-
-          document.getElementById("qrCode").style.display = "none";
-          document.getElementById("btnConectar").style.display = "none";
-        });
-      }
-
-      window.onload(() => onload());
-    </script>
+    <h1>Esta aplicação é uma API de uso interno</h1>
   </body>
 </html>

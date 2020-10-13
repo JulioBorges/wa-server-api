@@ -1,14 +1,13 @@
-// tslint:disable: no-var-requires
-// tslint:disable: no-console
 import express from "express";
 import { createServer, Server } from "http";
 import socketIo from "socket.io";
 import { Client } from "whatsapp-web.js";
 import path = require("path");
-import bodyParser = require("body-parser");
 import { TagsSocketIO } from "./tags-socket-io";
 import cors from "cors";
-const fs = require(`fs`);
+import fs from "fs";
+import WAWebJS = require("whatsapp-web.js");
+import { ContainerMensagens } from "./container-mensagens";
 
 class App {
   public app: express.Application;
@@ -23,7 +22,7 @@ class App {
     this.listen();
   }
 
-  routes() {
+  private routes() {
     this.app = express();
     this.app.use((req, res, next) => {
       res.header("Access-Control-Allow-Origin", "*");
@@ -32,8 +31,6 @@ class App {
       next();
     });
 
-    this.app.use(bodyParser.json());
-    this.app.use(bodyParser.urlencoded({ extended: true }));
     this.app.set("views", path.join(__dirname, "views"));
     this.app.set("view engine", "ejs");
 
@@ -49,45 +46,48 @@ class App {
 
   private listen(): void {
     this.io.on("connection", (socket: SocketIO.Socket) => {
-      console.log(`a user ${socket.id} connected`);
+      this.logarInfo(`a user ${socket.id} connected`);
 
-      socket.on(TagsSocketIO.INIT, (telefone) => {
-        console.log("Init " + telefone);
+      socket.on(TagsSocketIO.INIT, async (phone) => {
+        const telefone = this.sanitizarTelefone(phone);
+        this.logarInfo("Init " + telefone);
+        const cli = await this.session(telefone, socket);
         this.sessions[socket.id] = {
           telefone,
-          client: this.session(telefone, socket),
+          client: cli,
         };
       });
 
-      socket.on("disconnect", () => {
-        console.log(`user ${socket.client.id} disconnected`);
+      socket.on("disconnect", async () => {
+        this.logarInfo(`user ${socket.client.id} disconnected`);
         const clientWA = this.sessions[socket.id];
+
         if (!!clientWA) {
           try {
-            clientWA.client.logout().then(() => {
-              console.log("fez logout");
-              clientWA.client.destroy().then(() => {
-                console.log("destruiu browser");
-                this.deletarDadosLocais(socket.id, clientWA.telefone);
-              });
-            });
+            await clientWA.client.logout();
+            this.logarInfo("fez logout");
+
+            await clientWA.client.destroy();
+
+            this.logarInfo("destruiu browser");
+
+            this.deletarDadosLocais(socket.id, clientWA.telefone);
           } catch (error) {
-            console.log("não foi possível destruir o cliente WA");
+            this.logarInfo("não foi possível destruir o cliente WA");
           }
         }
       });
     });
   }
 
-  deletarDadosLocais(socketId: string, telefone: string) {
+  private deletarDadosLocais(socketId: string, phone: string) {
+    const telefone = this.sanitizarTelefone(phone);
     const dir = path.join(__dirname, `${telefone}`);
-    let deleted = false;
 
     setTimeout(() => {
       fs.rmdir(dir, { recursive: true }, (err: Error) => {
         if (!err) {
-          deleted = true;
-          console.log(`diretório ${telefone} deletado`);
+          this.logarInfo(`diretório ${telefone} deletado`);
         }
       });
     }, 1500);
@@ -95,7 +95,8 @@ class App {
     delete this.sessions[socketId];
   }
 
-  session(telefone: string, socket: SocketIO.Socket): Client {
+  private async session(telefone: string, socket: SocketIO.Socket): Promise<Client> {
+    this.logarInfo("starting session at " + telefone);
     let sessionFile;
     if (fs.existsSync(`./${telefone}.json`)) {
       sessionFile = require(`./${telefone}.json`);
@@ -112,28 +113,54 @@ class App {
     });
 
     client.initialize();
-
-    console.log(`Cliente WAconectado: ${telefone}`);
+    this.logarInfo(`Cliente WAconectado: ${telefone}`);
 
     client.on("qr", (qr: any) => {
-      console.log(`QR gerado para o cliente`);
+      this.logarInfo(`QR gerado para o cliente`);
       socket.emit(TagsSocketIO.QRCODE, qr);
     });
 
     client.on("ready", () => {
-      console.log("Cliente está pronto");
+      this.logarInfo("Cliente está pronto");
       socket.emit(TagsSocketIO.WACONECTADO);
     });
 
-    socket.on("message-wa", (msg: WAMessage) => {
-      console.log("enviando mensagem. . .");
-      console.log(msg);
+    socket.on(TagsSocketIO.MESSAGEWA, async (container: ContainerMensagens) => {
+      this.logarInfo("Enviando mensagens. . .");
+      container.telefoneOrigem = this.sanitizarTelefone(container.telefoneOrigem);
+      this.logarInfo(container);
 
-      const to = `${msg.number}@c.us`;
-      this.sessions[socket.id].client.sendMessage(to, msg.message, {});
+      container.mensagens.forEach((mensagem) => {
+        setTimeout(() => {
+          mensagem.telefoneDestino = this.sanitizarTelefone(mensagem.telefoneDestino);
+
+          const to = `${mensagem.telefoneDestino}@c.us`;
+          this.sessions[socket.id].client.sendMessage(to, mensagem.textoMensagem, {});
+        }, 2000);
+      });
     });
 
     return client;
+  }
+
+  private logarInfo(info: any): void {
+    // tslint:disable-next-line: no-console
+    console.log(info);
+  }
+
+  private sanitizarTelefone(telefone: string): string {
+    let temp = telefone.replace(/\D/g, "");
+    if (telefone.startsWith("55")) {
+      temp = telefone.substr(2);
+    }
+
+    const ddd = temp.substring(0, 2);
+    temp = temp.substr(2);
+
+    if (temp.length === 9) {
+      temp = temp.substr(1);
+    }
+    return `55${ddd}${temp}`;
   }
 }
 
