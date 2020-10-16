@@ -71,7 +71,7 @@ class App {
 
             this.logarInfo("destruiu browser");
 
-            this.deletarDadosLocais(socket.id, clientWA.telefone);
+            // this.deletarDadosLocais(socket.id, clientWA.telefone);
           } catch (error) {
             this.logarInfo("não foi possível destruir o cliente WA");
           }
@@ -123,6 +123,10 @@ class App {
     client.on("ready", () => {
       this.logarInfo("Cliente está pronto");
       socket.emit(TagsSocketIO.WACONECTADO);
+    });
+
+    client.on("message", () => {
+      socket.emit("AUTH");
     });
 
     socket.on(TagsSocketIO.MESSAGEWA, async (container: ContainerMensagens) => {
