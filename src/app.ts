@@ -14,7 +14,7 @@ class App {
   public server: Server;
   public io: SocketIO.Server;
   public PORT: number = 8080;
-  public sessions: { [id: string]: { telefone: string; client: Client } } = {};
+  public sessions: { [id: string]: { client: Client } } = {};
 
   constructor() {
     this.routes();
@@ -46,74 +46,59 @@ class App {
 
   private listen(): void {
     this.io.on("connection", (socket: SocketIO.Socket) => {
-      this.logarInfo(`a user ${socket.id} connected`);
+      this.logarInfo(`Usuário ${socket.id} conectado`);
 
-      socket.on(TagsSocketIO.INIT, async (phone) => {
-        const telefone = this.sanitizarTelefone(phone);
-        this.logarInfo("Init " + telefone);
-        const cli = await this.session(telefone, socket);
+      socket.on(TagsSocketIO.INIT, async () => {
+        this.logarInfo("Inicializando " + socket.id);
+        const cli = await this.session(socket);
+
         this.sessions[socket.id] = {
-          telefone,
           client: cli,
         };
       });
 
       socket.on("disconnect", async () => {
-        this.logarInfo(`user ${socket.client.id} disconnected`);
-        const clientWA = this.sessions[socket.id];
+        this.logarInfo(`Usuário ${socket.client.id} desconectado`);
+        const clientWA = this.sessions[socket.client.id];
 
         if (!!clientWA) {
           try {
             await clientWA.client.logout();
-            this.logarInfo("fez logout");
+            this.logarInfo(`Usuario ${socket.client.id} fez logout`);
 
             await clientWA.client.destroy();
 
-            this.logarInfo("destruiu browser");
+            this.logarInfo(`Usuário ${socket.client.id} destruiu browser`);
 
-            // this.deletarDadosLocais(socket.id, clientWA.telefone);
+            this.deletarDadosLocais(socket.id);
           } catch (error) {
-            this.logarInfo("não foi possível destruir o cliente WA");
+            this.logarInfo("Não foi possível destruir o cliente Whatsapp");
           }
         }
       });
     });
   }
 
-  private deletarDadosLocais(socketId: string, phone: string) {
-    const telefone = this.sanitizarTelefone(phone);
-    const dir = path.join(__dirname, `${telefone}`);
-
-    setTimeout(() => {
-      fs.rmdir(dir, { recursive: true }, (err: Error) => {
-        if (!err) {
-          this.logarInfo(`diretório ${telefone} deletado`);
-        }
-      });
-    }, 1500);
-
+  private deletarDadosLocais(socketId: string) {
     delete this.sessions[socketId];
   }
 
-  private async session(telefone: string, socket: SocketIO.Socket): Promise<Client> {
-    this.logarInfo("starting session at " + telefone);
+  private async session(socket: SocketIO.Socket): Promise<Client> {
+    this.logarInfo("starting session at " + socket.id);
     let sessionFile;
-    if (fs.existsSync(`./${telefone}.json`)) {
-      sessionFile = require(`./${telefone}.json`);
+    if (fs.existsSync(`./${socket.id}.json`)) {
+      sessionFile = require(`./${socket.id}.json`);
     }
 
     const client = new Client({
-      qrRefreshIntervalMs: 120000,
       puppeteer: {
         headless: true,
-        userDataDir: path.join(__dirname, `${telefone}`),
-        args: ["--no-sandbox"],
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
       },
-      session: sessionFile,
     });
 
     client.initialize();
-    this.logarInfo(`Cliente WAconectado: ${telefone}`);
+    this.logarInfo(`Cliente WAconectado: ${socket.id}`);
 
     client.on("qr", (qr: any) => {
       this.logarInfo(`QR gerado para o cliente`);
@@ -131,20 +116,28 @@ class App {
 
     socket.on(TagsSocketIO.MESSAGEWA, async (container: ContainerMensagens) => {
       this.logarInfo("Enviando mensagens. . .");
-      container.telefoneOrigem = this.sanitizarTelefone(container.telefoneOrigem);
-      this.logarInfo(container);
 
-      container.mensagens.forEach((mensagem) => {
-        setTimeout(() => {
-          mensagem.telefoneDestino = this.sanitizarTelefone(mensagem.telefoneDestino);
+      for (const mensagem of container.mensagens) {
+        mensagem.telefoneDestino = this.sanitizarTelefone(mensagem.telefoneDestino);
 
-          const to = `${mensagem.telefoneDestino}@c.us`;
-          this.sessions[socket.id].client.sendMessage(to, mensagem.textoMensagem, {});
-        }, 2000);
-      });
+        this.logarInfo("Enviando mensagem");
+        this.logarInfo(mensagem);
+
+        const to = `${mensagem.telefoneDestino}@c.us`;
+        this.sessions[socket.id].client.sendMessage(to, mensagem.textoMensagem, {});
+        await this.timeout(1500);
+        this.logarInfo("Mensagem enviada");
+      }
+
+      this.logarInfo("Todas as mensagens foram enviadas, realizando logout");
+      socket.disconnect();
     });
 
     return client;
+  }
+
+  private timeout(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private logarInfo(info: any): void {
